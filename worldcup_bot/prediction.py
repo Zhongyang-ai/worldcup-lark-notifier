@@ -35,13 +35,24 @@ class DeepSeekPredictor:
             "thinking": {"type": "enabled"},
             "reasoning_effort": "high",
             "response_format": {"type": "json_object"},
-            "max_tokens": 2400,
+            "max_tokens": 6000,
             "temperature": 0.2,
             "stream": False,
         }
         result = self._post_with_retry(payload)
-        content = result["choices"][0]["message"]["content"]
-        parsed = json.loads(content)
+        content = result["choices"][0]["message"].get("content") or ""
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            LOG.warning("DeepSeek returned no valid JSON; retrying with medium reasoning")
+            payload["reasoning_effort"] = "medium"
+            payload["thinking"] = {"type": "enabled"}
+            payload["max_tokens"] = 6000
+            result = self._post_with_retry(payload)
+            content = result["choices"][0]["message"].get("content") or ""
+            if not content:
+                raise RuntimeError("DeepSeek returned empty final content")
+            parsed = json.loads(content)
         usage = result.get("usage", {})
         return self._format(parsed), usage
 
