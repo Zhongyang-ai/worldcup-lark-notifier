@@ -43,13 +43,31 @@ class EspnProvider:
 
     def fetch_details(self, match: Match) -> Match:
         data = self._get("summary", {"event": match.match_id})
-        details = data.get("header", {}).get("competitions", [{}])[0].get("details", [])
+        competition = data.get("header", {}).get("competitions", [{}])[0]
+        details = competition.get("details", [])
         events: list[MatchEvent] = []
         for detail in details:
             event = self._parse_detail(detail)
             if event:
                 events.append(event)
-        return Match(**{**match.__dict__, "events": events})
+        # The summary endpoint often publishes a goal and corrected score before
+        # the scoreboard endpoint. Use its live score/status as the authority.
+        competitors = {item.get("homeAway"): item for item in competition.get("competitors", [])}
+        home_score = self._score_value(competitors.get("home", {}).get("score"))
+        away_score = self._score_value(competitors.get("away", {}).get("score"))
+        status = competition.get("status", {})
+        status_type = status.get("type", {})
+        values = {
+            **match.__dict__,
+            "home_score": int(home_score) if home_score is not None else match.home_score,
+            "away_score": int(away_score) if away_score is not None else match.away_score,
+            "state": status_type.get("state", match.state),
+            "status_name": status_type.get("name", match.status_name),
+            "status_text": status_type.get("description", match.status_text),
+            "clock": status.get("displayClock", match.clock),
+            "events": events,
+        }
+        return Match(**values)
 
     def fetch_prediction_context(self, match: Match) -> dict:
         data = self._get("summary", {"event": match.match_id})
