@@ -23,6 +23,9 @@ class Config:
     send_existing_on_start: bool
     heartbeat_hour: int
     schedule_preview_hour: int
+    deepseek_api_key: str
+    deepseek_model: str
+    prediction_enabled: bool
     database_path: str
     health_port: int
     log_level: str
@@ -45,6 +48,9 @@ class Config:
             send_existing_on_start=_bool("SEND_EXISTING_ON_START", False),
             heartbeat_hour=int(os.getenv("HEARTBEAT_HOUR", "9")) % 24,
             schedule_preview_hour=int(os.getenv("SCHEDULE_PREVIEW_HOUR", "22")) % 24,
+            deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", "").strip(),
+            deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro").strip(),
+            prediction_enabled=_bool("PREDICTION_ENABLED", True),
             database_path=os.getenv("DATABASE_PATH", "data/worldcup.db"),
             health_port=int(os.getenv("HEALTH_PORT", "8080")),
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),

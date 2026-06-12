@@ -13,6 +13,7 @@ from .config import Config
 from .engine import EventEngine
 from .lark import LarkNotifier
 from .provider import EspnProvider
+from .prediction import DeepSeekPredictor
 from .store import Store
 
 LOG = logging.getLogger("worldcup_bot")
@@ -51,6 +52,7 @@ def main() -> None:
     store = Store(config.database_path)
     notifier = LarkNotifier(config.lark_webhook_url, config.lark_secret, config.request_timeout_seconds)
     engine = EventEngine(config, store, notifier.send)
+    predictor = DeepSeekPredictor(config.deepseek_api_key, config.deepseek_model)
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -67,7 +69,7 @@ def main() -> None:
             Health.last_success = datetime.now().astimezone().isoformat()
             Health.last_error = ""
             _daily_heartbeat(config, store, notifier, matches)
-            _daily_schedule_preview(config, store, notifier, matches)
+            _daily_schedule_preview(config, store, notifier, matches, provider=provider, predictor=predictor)
             LOG.info("Processed %d matches; live=%s", len(matches), live)
         except Exception as exc:
             Health.last_error = str(exc)
@@ -91,6 +93,8 @@ def _daily_schedule_preview(
     notifier: LarkNotifier,
     matches,
     now: datetime | None = None,
+    provider: EspnProvider | None = None,
+    predictor: DeepSeekPredictor | None = None,
 ) -> None:
     tz = ZoneInfo(config.timezone)
     now = now.astimezone(tz) if now else datetime.now(tz)
@@ -120,6 +124,17 @@ def _daily_schedule_preview(
         message = "\n".join(lines)
     else:
         message = f"{title}\n明日无比赛"
+
+    if config.prediction_enabled and predictor and predictor.enabled and provider and fixtures:
+        try:
+            contexts = [provider.fetch_prediction_context(match) for _, match in fixtures]
+            analysis, usage = predictor.predict(contexts)
+            if analysis:
+                message += "\n\n" + analysis
+            LOG.info("DeepSeek prediction usage: %s", usage)
+        except Exception:
+            LOG.exception("AI prediction failed; sending schedule without analysis")
+            message += "\n\n⚠️ 本次 AI 分析暂不可用，赛程推送不受影响。"
 
     notifier.send(message)
     store.set_meta(key, "sent")

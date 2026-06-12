@@ -7,6 +7,7 @@
 - SQLite 去重，服务重启不会重复发送
 - 每日心跳与 HTTP 健康检查
 - 每晚 22:00（新加坡时间）推送次日赛程
+- 可选 DeepSeek AI 赛前预测：结合公开赔率变化、盘口、大小球、赛事记录、交锋、伤停与相关新闻
 
 ## 你需要提供的两项内容
 
@@ -26,6 +27,8 @@ cp .env.example .env
 ```bash
 python scripts/test_lark.py
 ```
+
+启用 AI 预测时，在 `.env` 填写 `DEEPSEEK_API_KEY`。API Key 不会进入 Git。
 
 启动：
 

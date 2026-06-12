@@ -10,7 +10,7 @@ from worldcup_bot.store import Store
 
 
 def config(path):
-    return Config("x", "", "Asia/Singapore", 8, 60, 12, True, True, True, False, 9, 22, path, 8080, "INFO")
+    return Config("x", "", "Asia/Singapore", 8, 60, 12, True, True, True, False, 9, 22, "", "deepseek-v4-pro", True, path, 8080, "INFO")
 
 
 class EventEngineTest(unittest.TestCase):

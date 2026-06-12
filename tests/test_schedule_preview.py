@@ -23,7 +23,7 @@ class SchedulePreviewTest(unittest.TestCase):
         os.close(handle)
         self.store = Store(self.path)
         self.notifier = Notifier()
-        self.config = Config("x", "", "Asia/Singapore", 8, 60, 12, True, True, True, False, 9, 22, self.path, 8080, "INFO")
+        self.config = Config("x", "", "Asia/Singapore", 8, 60, 12, True, True, True, False, 9, 22, "", "deepseek-v4-pro", True, self.path, 8080, "INFO")
 
     def tearDown(self):
         os.unlink(self.path)
