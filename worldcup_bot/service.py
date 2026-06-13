@@ -52,11 +52,11 @@ def main() -> None:
     store = Store(config.database_path)
     notifier = LarkNotifier(config.lark_webhook_url, config.lark_secret, config.request_timeout_seconds)
     engine = EventEngine(config, store, notifier.send)
-    predictor = DeepSeekPredictor(config.deepseek_api_key, config.deepseek_model)
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     _start_health_server(config.health_port)
+    threading.Thread(target=_schedule_worker, args=(config, stop), daemon=True).start()
     LOG.info("World Cup notifier started")
 
     while not stop.is_set():
@@ -69,12 +69,42 @@ def main() -> None:
             Health.last_success = datetime.now().astimezone().isoformat()
             Health.last_error = ""
             _daily_heartbeat(config, store, notifier, matches)
-            _daily_schedule_preview(config, store, notifier, matches, provider=provider, predictor=predictor)
             LOG.info("Processed %d matches; live=%s", len(matches), live)
         except Exception as exc:
             Health.last_error = str(exc)
             LOG.exception("Polling cycle failed")
         stop.wait(config.poll_live_seconds if live else config.poll_idle_seconds)
+
+
+def _schedule_worker(config: Config, stop: threading.Event) -> None:
+    provider = EspnProvider(config.request_timeout_seconds)
+    store = Store(config.database_path)
+    notifier = LarkNotifier(config.lark_webhook_url, config.lark_secret, config.request_timeout_seconds)
+    predictor = DeepSeekPredictor(config.deepseek_api_key, config.deepseek_model)
+    tz = ZoneInfo(config.timezone)
+
+    while not stop.is_set():
+        now = datetime.now(tz)
+        tomorrow = now.date() + timedelta(days=1)
+        key = f"schedule-preview:{tomorrow.isoformat()}"
+        if now.hour == config.schedule_preview_hour and not store.get_meta(key):
+            try:
+                LOG.info("Starting schedule preview for %s", tomorrow)
+                matches = provider.fetch_matches()
+                _daily_schedule_preview(
+                    config,
+                    store,
+                    notifier,
+                    matches,
+                    now=now,
+                    provider=provider,
+                    predictor=predictor,
+                )
+                if store.get_meta(key):
+                    LOG.info("Schedule preview sent for %s", tomorrow)
+            except Exception:
+                LOG.exception("Schedule preview worker failed for %s", tomorrow)
+        stop.wait(15 if now.hour == config.schedule_preview_hour else 60)
 
 
 def _daily_heartbeat(config: Config, store: Store, notifier: LarkNotifier, matches) -> None:
