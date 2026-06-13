@@ -43,8 +43,11 @@ class EventEngine:
 
     def _send_new_match_events(self, match: Match) -> None:
         for event in match.events:
-            key = self._event_key(match, event.fingerprint)
-            if self.store.was_sent(key):
+            key = self._event_key(match, event.event_id or event.fingerprint)
+            legacy_key = self._event_key(match, event.fingerprint)
+            if self.store.was_sent(key) or self.store.was_sent(legacy_key):
+                if event.event_id and not self.store.was_sent(key):
+                    self.store.mark_sent(key)
                 continue
             if event.kind == "red_card" and not self.config.notify_red_card:
                 self.store.mark_sent(key)
@@ -52,7 +55,8 @@ class EventEngine:
             if event.kind == "goal":
                 extra = f"（{event.detail}）" if event.detail else ""
                 player = event.player or "进球球员待更新"
-                text = f"⚽ 进球 {event.minute}\n{self._scoreline(match)}\n{event.team}：{player}{extra}"
+                scoreline = self._event_scoreline(match, event)
+                text = f"⚽ 进球 {event.minute}\n{scoreline}\n{event.team}：{player}{extra}"
             else:
                 text = f"🟥 红牌 {event.minute}\n{self._scoreline(match)}\n{event.team}：{event.player or '球员待更新'}"
             self.send(text + self._timestamp())
@@ -85,10 +89,15 @@ class EventEngine:
         return f"{match.match_id}:{fingerprint}"
 
     @staticmethod
+    def _event_scoreline(match: Match, event) -> str:
+        home_score = event.home_score if event.home_score is not None else match.home_score
+        away_score = event.away_score if event.away_score is not None else match.away_score
+        return f"{match.home} {home_score}-{away_score} {match.away}"
+
+    @staticmethod
     def _scoreline(match: Match) -> str:
         return f"{match.home} {match.home_score}-{match.away_score} {match.away}"
 
     def _timestamp(self) -> str:
         now = datetime.now(self.tz).strftime("%H:%M:%S %Z")
         return f"\n推送时间：{now}"
-

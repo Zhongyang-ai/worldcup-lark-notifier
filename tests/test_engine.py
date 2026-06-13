@@ -48,6 +48,12 @@ class EventEngineTest(unittest.TestCase):
         self.assertEqual(1, len(self.messages))
         self.assertIn("比分修正", self.messages[0])
 
+    def test_goal_uses_event_score_not_stale_match_score(self):
+        self.engine.process(self.base)
+        goal = MatchEvent("goal:Mexico:10:A", "goal", "10'", "Mexico", "A", event_id="event-1", home_score=1, away_score=0)
+        self.engine.process(replace(self.base, state="in", events=[goal]))
+        self.assertIn("Mexico 1-0 South Africa", self.messages[-1])
+
 
 if __name__ == "__main__":
     unittest.main()

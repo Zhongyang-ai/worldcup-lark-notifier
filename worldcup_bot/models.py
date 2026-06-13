@@ -11,6 +11,9 @@ class MatchEvent:
     team: str
     player: str = ""
     detail: str = ""
+    event_id: str = ""
+    home_score: int | None = None
+    away_score: int | None = None
 
 
 @dataclass(frozen=True)
@@ -34,4 +37,3 @@ class Match:
     @property
     def is_finished(self) -> bool:
         return self.state == "post"
-

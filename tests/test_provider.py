@@ -9,6 +9,17 @@ class ProviderTest(unittest.TestCase):
     def test_summary_score_overrides_stale_scoreboard(self):
         stale = Match("1", "Canada", "Bosnia", 0, 0, "in", "STATUS_FIRST_HALF", "First Half", "21'", "x")
         summary = {
+            "keyEvents": [
+                {
+                    "id": "goal-1",
+                    "scoringPlay": True,
+                    "shootout": False,
+                    "type": {"type": "goal"},
+                    "team": {"displayName": "Bosnia"},
+                    "clock": {"displayValue": "21'"},
+                    "participants": [{"athlete": {"displayName": "Jovo Lukic"}}],
+                }
+            ],
             "header": {
                 "competitions": [
                     {
@@ -20,14 +31,7 @@ class ProviderTest(unittest.TestCase):
                             {"homeAway": "home", "score": "0"},
                             {"homeAway": "away", "score": "1"},
                         ],
-                        "details": [
-                            {
-                                "scoringPlay": True,
-                                "team": {"displayName": "Bosnia"},
-                                "clock": {"displayValue": "21'"},
-                                "participants": [{"athlete": {"displayName": "Jovo Lukic"}}],
-                            }
-                        ],
+                        "details": [],
                     }
                 ]
             }
@@ -39,6 +43,21 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual((0, 1), (current.home_score, current.away_score))
         self.assertEqual("22'", current.clock)
         self.assertEqual(1, len(current.events))
+        self.assertEqual("goal-1", current.events[0].event_id)
+        self.assertEqual((0, 1), (current.events[0].home_score, current.events[0].away_score))
+
+    def test_each_goal_has_its_score_and_stable_id(self):
+        events = EspnProvider._parse_key_events(
+            [
+                {"id": "a", "scoringPlay": True, "team": {"displayName": "USA"}, "clock": {"displayValue": "7'"}, "participants": []},
+                {"id": "b", "scoringPlay": True, "team": {"displayName": "USA"}, "clock": {"displayValue": "31'"}, "participants": []},
+                {"id": "c", "scoringPlay": True, "team": {"displayName": "Paraguay"}, "clock": {"displayValue": "73'"}, "participants": []},
+            ],
+            "USA",
+            "Paraguay",
+        )
+        self.assertEqual(["a", "b", "c"], [event.event_id for event in events])
+        self.assertEqual([(1, 0), (2, 0), (2, 1)], [(event.home_score, event.away_score) for event in events])
 
 
 if __name__ == "__main__":

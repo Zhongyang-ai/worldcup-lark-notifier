@@ -44,11 +44,12 @@ class EspnProvider:
     def fetch_details(self, match: Match) -> Match:
         data = self._get("summary", {"event": match.match_id})
         competition = data.get("header", {}).get("competitions", [{}])[0]
-        details = competition.get("details", [])
-        events: list[MatchEvent] = []
-        for detail in details:
+        key_events = data.get("keyEvents", []) or []
+        events = self._parse_key_events(key_events, match.home, match.away)
+        # Red cards are not always included in keyEvents, so retain them from details.
+        for detail in competition.get("details", []):
             event = self._parse_detail(detail)
-            if event:
+            if event and event.kind == "red_card":
                 events.append(event)
         # The summary endpoint often publishes a goal and corrected score before
         # the scoreboard endpoint. Use its live score/status as the authority.
@@ -68,6 +69,44 @@ class EspnProvider:
             "events": events,
         }
         return Match(**values)
+
+    @classmethod
+    def _parse_key_events(cls, raw_events: list[dict], home: str, away: str) -> list[MatchEvent]:
+        events = []
+        home_score = 0
+        away_score = 0
+        for raw in raw_events:
+            if not raw.get("scoringPlay") or raw.get("shootout"):
+                continue
+            team = raw.get("team", {}).get("displayName", "Unknown")
+            if team == home:
+                home_score += 1
+            elif team == away:
+                away_score += 1
+            participants = raw.get("participants", [])
+            player = participants[0].get("athlete", {}).get("displayName", "") if participants else ""
+            minute = raw.get("clock", {}).get("displayValue", "")
+            event_type = raw.get("type", {}).get("type", "")
+            flags = []
+            if event_type == "own-goal":
+                flags.append("乌龙球")
+            if event_type == "penalty-kick":
+                flags.append("点球")
+            fingerprint = ":".join(["goal", team, minute, player.strip()])
+            events.append(
+                MatchEvent(
+                    fingerprint=fingerprint,
+                    kind="goal",
+                    minute=minute,
+                    team=team,
+                    player=player.strip(),
+                    detail=" / ".join(flags),
+                    event_id=str(raw.get("id", "")),
+                    home_score=home_score,
+                    away_score=away_score,
+                )
+            )
+        return events
 
     def fetch_prediction_context(self, match: Match) -> dict:
         data = self._get("summary", {"event": match.match_id})
@@ -247,5 +286,5 @@ class EspnProvider:
         if detail.get("ownGoal"):
             flags.append("乌龙球")
         kind = "goal" if is_goal else "red_card"
-        fingerprint = ":".join([kind, team, minute, player])
+        fingerprint = ":".join([kind, team, minute, player.strip()])
         return MatchEvent(fingerprint, kind, minute, team, player, " / ".join(flags))
