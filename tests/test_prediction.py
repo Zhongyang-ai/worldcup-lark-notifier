@@ -28,6 +28,10 @@ class PredictionTest(unittest.TestCase):
         self.assertIn("2-1", text)
         self.assertIn("不构成投注建议", text)
 
+    def test_extracts_blocks_for_incremental_reports(self):
+        text = "🤖 DeepSeek AI 赛前分析\n\nA vs B\n胜平负：40% / 30% / 30%\n\n仅供参考，不构成投注建议。"
+        self.assertEqual(["A vs B\n胜平负：40% / 30% / 30%"], DeepSeekPredictor._extract_prediction_blocks(text))
+
 
 if __name__ == "__main__":
     unittest.main()

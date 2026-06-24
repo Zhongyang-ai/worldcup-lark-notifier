@@ -25,6 +25,8 @@ class Config:
     schedule_preview_hour: int
     deepseek_api_key: str
     deepseek_model: str
+    deepseek_timeout_seconds: int
+    deepseek_reasoning_effort: str
     prediction_enabled: bool
     database_path: str
     health_port: int
@@ -50,6 +52,8 @@ class Config:
             schedule_preview_hour=int(os.getenv("SCHEDULE_PREVIEW_HOUR", "22")) % 24,
             deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", "").strip(),
             deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro").strip(),
+            deepseek_timeout_seconds=max(20, int(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "60"))),
+            deepseek_reasoning_effort=os.getenv("DEEPSEEK_REASONING_EFFORT", "medium").strip(),
             prediction_enabled=_bool("PREDICTION_ENABLED", True),
             database_path=os.getenv("DATABASE_PATH", "data/worldcup.db"),
             health_port=int(os.getenv("HEALTH_PORT", "8080")),

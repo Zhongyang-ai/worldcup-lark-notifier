@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import time
 from urllib.request import Request, urlopen
 
@@ -11,10 +12,11 @@ LOG = logging.getLogger("worldcup_bot")
 class DeepSeekPredictor:
     URL = "https://api.deepseek.com/chat/completions"
 
-    def __init__(self, api_key: str, model: str, timeout: int = 45):
+    def __init__(self, api_key: str, model: str, timeout: int = 60, reasoning_effort: str = "medium"):
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
+        self.reasoning_effort = reasoning_effort or "medium"
 
     @property
     def enabled(self) -> bool:
@@ -33,9 +35,9 @@ class DeepSeekPredictor:
                 },
             ],
             "thinking": {"type": "enabled"},
-            "reasoning_effort": "high",
+            "reasoning_effort": self.reasoning_effort,
             "response_format": {"type": "json_object"},
-            "max_tokens": 6000,
+            "max_tokens": 3500,
             "temperature": 0.2,
             "stream": False,
         }
@@ -47,7 +49,7 @@ class DeepSeekPredictor:
             LOG.warning("DeepSeek returned no valid JSON; retrying with medium reasoning")
             payload["reasoning_effort"] = "medium"
             payload["thinking"] = {"type": "enabled"}
-            payload["max_tokens"] = 6000
+            payload["max_tokens"] = 3500
             result = self._post_with_retry(payload)
             content = result["choices"][0]["message"].get("content") or ""
             if not content:
@@ -55,6 +57,34 @@ class DeepSeekPredictor:
             parsed = json.loads(content)
         usage = result.get("usage", {})
         return self._format(parsed), usage
+
+    def predict_each(self, contexts: list[dict]) -> tuple[str, dict]:
+        """Predict one fixture at a time so one slow match does not sink the report."""
+        if not contexts:
+            return "", {}
+
+        predictions = []
+        failures = []
+        total_usage: dict[str, int] = {}
+        for context in contexts:
+            label = f"{context.get('home', '主队')} vs {context.get('away', '客队')}"
+            try:
+                text, usage = self.predict([context])
+                predictions.extend(self._extract_prediction_blocks(text))
+                self._merge_usage(total_usage, usage)
+                LOG.info("DeepSeek prediction succeeded for %s: %s", label, usage)
+            except Exception as exc:
+                LOG.exception("DeepSeek prediction failed for %s", label)
+                failures.append(f"{label}：AI 分析超时或失败（{exc}）")
+
+        parts = ["🤖 DeepSeek AI 赛前分析"]
+        if predictions:
+            parts.extend(predictions)
+        if failures:
+            parts.append("\n⚠️ 以下比赛 AI 分析不可用")
+            parts.extend(failures)
+        parts.append("\n仅供参考，不构成投注建议。")
+        return "\n".join(parts), total_usage
 
     def _post_with_retry(self, payload: dict) -> dict:
         body = json.dumps(payload).encode()
@@ -74,9 +104,38 @@ class DeepSeekPredictor:
                     return json.load(response)
             except Exception as exc:
                 last_error = exc
+                if isinstance(exc, (TimeoutError, socket.timeout)):
+                    break
                 if attempt == 0:
                     time.sleep(2)
         raise RuntimeError(f"DeepSeek request failed: {last_error}")
+
+    @staticmethod
+    def _extract_prediction_blocks(text: str) -> list[str]:
+        lines = text.splitlines()
+        blocks = []
+        current = []
+        for line in lines:
+            if line == "🤖 DeepSeek AI 赛前分析" or "仅供参考" in line:
+                continue
+            if line.strip() and " vs " in line and current:
+                blocks.append("\n".join(current).rstrip())
+                current = [line]
+            elif line.strip() or current:
+                current.append(line)
+        if current:
+            blocks.append("\n".join(current).rstrip())
+        return [block for block in blocks if block.strip()]
+
+    @staticmethod
+    def _merge_usage(total: dict, usage: dict) -> None:
+        for key, value in usage.items():
+            if isinstance(value, int):
+                total[key] = total.get(key, 0) + value
+            elif isinstance(value, dict):
+                nested = total.setdefault(key, {})
+                if isinstance(nested, dict):
+                    DeepSeekPredictor._merge_usage(nested, value)
 
     @staticmethod
     def _system_prompt() -> str:

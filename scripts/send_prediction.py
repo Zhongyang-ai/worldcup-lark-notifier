@@ -53,8 +53,13 @@ def main() -> None:
         raise RuntimeError("No pre-match fixtures available for prediction")
 
     contexts = [provider.fetch_prediction_context(match) for _, match in upcoming]
-    predictor = DeepSeekPredictor(config.deepseek_api_key, config.deepseek_model)
-    analysis, usage = predictor.predict(contexts)
+    predictor = DeepSeekPredictor(
+        config.deepseek_api_key,
+        config.deepseek_model,
+        config.deepseek_timeout_seconds,
+        config.deepseek_reasoning_effort,
+    )
+    analysis, usage = predictor.predict_each(contexts)
     lines = [f"📅 {target:%-m月%-d日}世界杯赛程与 AI 预测（新加坡时间）"]
     lines.extend(f"{kickoff:%H:%M}  {match.home} vs {match.away}" for kickoff, match in rows)
     message = "\n".join(lines) + "\n\n" + analysis

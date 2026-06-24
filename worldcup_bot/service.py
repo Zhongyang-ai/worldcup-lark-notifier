@@ -80,7 +80,12 @@ def _schedule_worker(config: Config, stop: threading.Event) -> None:
     provider = EspnProvider(config.request_timeout_seconds)
     store = Store(config.database_path)
     notifier = LarkNotifier(config.lark_webhook_url, config.lark_secret, config.request_timeout_seconds)
-    predictor = DeepSeekPredictor(config.deepseek_api_key, config.deepseek_model)
+    predictor = DeepSeekPredictor(
+        config.deepseek_api_key,
+        config.deepseek_model,
+        config.deepseek_timeout_seconds,
+        config.deepseek_reasoning_effort,
+    )
     tz = ZoneInfo(config.timezone)
 
     while not stop.is_set():
@@ -158,7 +163,7 @@ def _daily_schedule_preview(
     if config.prediction_enabled and predictor and predictor.enabled and provider and fixtures:
         try:
             contexts = [provider.fetch_prediction_context(match) for _, match in fixtures]
-            analysis, usage = predictor.predict(contexts)
+            analysis, usage = predictor.predict_each(contexts)
             if analysis:
                 message += "\n\n" + analysis
             LOG.info("DeepSeek prediction usage: %s", usage)
